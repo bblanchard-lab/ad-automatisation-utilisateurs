@@ -99,28 +99,26 @@ Pour résoudre l'erreur de sécurité et corriger les problèmes d'affichage, la
 
 **Code du script final (V3) :**
 ```powershell
-# Configuration de la console pour supporter l'encodage UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Importation du module Active Directory
 Import-Module ActiveDirectory
 
 $cheminFichier = "$PSScriptRoot\utilisateurs.csv"
-$listeUtilisateurs = Import-Csv -Path$cheminFichier -Encoding utf8
 
-# Définition d'un mot de passe temporaire sécurisé conforme aux exigences
+$listeUtilisateurs = Import-Csv -Path $cheminFichier -Encoding utf8
+
 $motDePasseBrut = "Bienvenue123!"
-$motDePasseSecurise = ConvertTo-SecureString$motDePasseBrut -AsPlainText -Force
 
-foreach ($user in $listeUtilisateurs) {$OU = "OU=$($user.Departement),DC=bblanchard,DC=lab"
+$motDePasseSecurise = ConvertTo-SecureString $motDePasseBrut -AsPlainText -Force
+
+foreach ($user in $listeUtilisateurs) {
+    $OU = "OU=$($user.Departement),DC=bblanchard,DC=lab"
     
-    # Vérification et création dynamique de l'OU
     if (-not (Get-ADOrganizationalUnit -Filter "Name -eq '$($user.Departement)'")) {
         Write-Host "Création de l'OU : $($user.Departement)" -ForegroundColor Yellow
         New-ADOrganizationalUnit -Name $($user.Departement) -Path "DC=bblanchard,DC=lab"
     }
 
-    # Vérification si l'utilisateur existe déjà (Idempotence)
     if (-not (Get-ADUser -Filter "SamAccountName -eq '$($user.Username)'")) {
         Write-Host "Création de l'utilisateur : $($user.Prenom) $($user.Nom)" -ForegroundColor Green
         
