@@ -16,7 +16,7 @@ En entreprise, créer des dizaines de comptes à la main un par un est long, ré
 
 ---
 
-## Technologies & Environnement utilisés
+## Technologies & environnement utilisés
 
 * **Système d'exploitation :** Windows Server 2022 Core / Desktop Experience
 * **Rôles Serveur :** Active Directory Domain Services (AD DS), DNS
@@ -27,8 +27,8 @@ En entreprise, créer des dizaines de comptes à la main un par un est long, ré
 
 ## Évolution du projet et résolution de problèmes
 
-### Étape 1 : Validation de la lecture des données (Version initiale)
-La première version du script avait pour objectif unique de valider que PowerShell parvenait à lire et mapper correctement les colonnes du fichier CSV avant de faire des modifications sur l'infrastructure. 
+### Étape 1 : Validation de la lecture du fichier CSV
+Le but de cette première version était simplement de valider que PowerShell arrivait à lire le fichier CSV et à bien mapper les colonnes, avant de commencer à toucher à l'infrastructure.
 
 **Code du script initial (V1) :**
 ```powershell
@@ -48,8 +48,8 @@ foreach ($user in$listeUtilisateurs) {
 
 ---
 
-### Étape 2 : Blocage de sécurité (Erreur de complexité de mot de passe)
-Une fois l'infrastructure Active Directory prête, la deuxième itération du script (version semi-finale) visait à automatiser la création conjointe des Unités Organisationnelles (OU) et des comptes utilisateurs directement depuis le fichier CSV.
+### Étape 2 : Problème de sécurité (Erreur de complexité de mot de passe)
+Une fois le domaine configuré, le but de cette version était de créer les Unités Organisationnelles (OU) et les comptes utilisateurs en même temps à partir du CSV.
 
 **Code du script semi-final (V2) :**
 ```powershell
@@ -74,20 +74,26 @@ foreach ($user in $listeUtilisateurs) {$OU = "OU=$($user.Departement),DC=bblanch
                -Path $OU `
                -Enabled $true
 }
-
 ```
 **Résultat obtenu et analyse de l'erreur dans la console :**
 L'exécution de cette version semi-finale a généré un blocage critique visible dans la console :
 
 ![Erreur de complexité Active Directory](./images/V2-Erreurs.png)
 
-Deux problèmes majeurs ont été identifiés lors de ce test :
-1. **Erreur d'encodage de la console (UTF-8) :** Les messages de sortie affichaient un problème de décodage des accents (ex: `CRÃ©ation de l'OU : TI`). Cela indique que la console PowerShell par défaut n'interprétait pas correctement les caractères accentués du script.
-2. **Blocage de sécurité AD (`ADPasswordComplexityException`) :** La commande `New-ADUser` (située à la ligne 35 du script) a renvoyé l'erreur système :  
-   > *New-ADUser : Le mot de passe ne répond pas aux spécifications de longueur, de complexité ou d'historique du domaine.*
+**Erreurs trouvées dans la console :**
+L'exécution de cette version a bloqué et a sorti des erreurs dans la console :
 
-**Analyse technique :** 
-Par défaut, un domaine Active Directory Windows Server applique strictement la politique `Default Domain Policy`. Tenter d'injecter et d'activer immédiatement (`-Enabled $true`) un compte utilisateur sans passer de paramètre `-AccountPassword` force l'AD à rejeter la requête, car la création d'un compte avec un mot de passe vide enfreint les critères de complexité obligatoires du domaine.
+Deux problèmes sont ressortis pendant ce test :
+
+Problème d'affichage des accents : Les messages affichaient des caractères bizarres (ex: CRÃ©ation de l'OU : TI). La console PowerShell n'utilisait pas le bon encodage pour afficher les accents du script.
+
+Erreur de mot de passe AD (ADPasswordComplexityException) : La commande New-ADUser a été bloquée par le serveur avec ce message :
+
+New-ADUser : Le mot de passe ne répond pas aux spécifications de longueur, de complexité ou d'historique du domaine.
+
+Pourquoi ça a bloqué...
+
+Par défaut, la stratégie de groupe de Windows Server (Default Domain Policy) interdit la création de comptes actifs (-Enabled $true) sans mot de passe. Comme le script essayait de créer les comptes à vide, l'Active Directory a rejeté la demande par sécurité.
 
 ---
 
@@ -130,20 +136,21 @@ foreach ($user in $listeUtilisateurs) {
         Write-Host "L'utilisateur $($user.Username) existe déjà. Passage au suivant." -ForegroundColor Cyan
     }
 }
+
 ```
-**Résultats obtenus et preuves de succès (V3) :**
+**Résultats et validations :**
 
-L'exécution finale du script démontre une automatisation fluide, sans aucune erreur rouge, respectant à la fois l'indempotence et la sécurité des données.
+Le script fonctionne maintenant sans aucune erreur. Les comptes existants sont détectés pour éviter les doublons et la sécurité est respectée.
 
-#### 1. Validation de l'exécution dans la console PowerShell
-Les captures suivantes montrent l'exécution pas à pas du script, la création des objets et la détection intelligente des comptes existants :
+### 1. Validation dans la console PowerShell
+Ces captures montrent le déroulement du script, la création propre des objets et le saut des comptes qui existaient déjà :
 
 ![Exécution initiale - Création des OUs](./images/V2-Validation-1.png)
 ![Provisioning des utilisateurs en direct](./images/V2-Validation-2.png)
 ![Idempotence - Détection et saut des comptes existants](./images/V2-Validation-3.png)
 
-#### 2. Structure finale validée dans l'Active Directory
-Voici la validation visuelle directement dans la console *Utilisateurs et ordinateurs Active Directory* ($ADUC$). Les comptes ont été correctement injectés et répartis dans leurs Unités Organisationnelles respectives avec l'obligation de changer le mot de passe à la prochaine session :
+### 2. Validation dans l'Active Directory
+Voici le résultat visuel dans la console Utilisateurs et ordinateurs Active Directory. Les comptes sont bien classés dans leurs OUs et configurés avec l'obligation de changer le mot de passe à la première connexion :
 
 ![Validation des comptes - Département TI](./images/Validation-TI.png)
 ![Validation des comptes - Département RH](./images/Validation-RH.png)
